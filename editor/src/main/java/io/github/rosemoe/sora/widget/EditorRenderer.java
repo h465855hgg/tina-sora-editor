@@ -75,6 +75,7 @@ import io.github.rosemoe.sora.lang.styling.color.ResolvableColor;
 import io.github.rosemoe.sora.lang.styling.inlayHint.InlayHint;
 import io.github.rosemoe.sora.lang.styling.line.LineAnchorStyle;
 import io.github.rosemoe.sora.lang.styling.line.LineBackground;
+import io.github.rosemoe.sora.lang.styling.line.LineBreakpoint;
 import io.github.rosemoe.sora.lang.styling.line.LineGutterBackground;
 import io.github.rosemoe.sora.lang.styling.line.LineSideIcon;
 import io.github.rosemoe.sora.lang.styling.line.LineStyles;
@@ -923,35 +924,78 @@ public class EditorRenderer {
             final float padding = editor.getDpUnit() * 2f;
             numberWidth = Math.max(0f, width - (iconSize + padding * 2f));
         }
-        if (paintOther.getTextAlign() != editor.getLineNumberAlign()) {
-            paintOther.setTextAlign(editor.getLineNumberAlign());
-        }
-        paintOther.setColor(color);
-        // Line number center align to text center
-        float y = (editor.getRowBottom(row) + editor.getRowTop(row)) / 2f - (metricsLineNumber.descent - metricsLineNumber.ascent) / 2f - metricsLineNumber.ascent - editor.getOffsetY();
+        
+        // Check if there's a breakpoint on this line
+        var breakpoint = getLineStyle(lineIndex, LineBreakpoint.class);
+        if (breakpoint != null) {
+            // Draw breakpoint circle instead of line number
+            drawBreakpointCircle(canvas, row, offsetX, numberWidth, breakpoint);
+        } else {
+            // Draw normal line number
+            if (paintOther.getTextAlign() != editor.getLineNumberAlign()) {
+                paintOther.setTextAlign(editor.getLineNumberAlign());
+            }
+            paintOther.setColor(color);
+            // Line number center align to text center
+            float y = (editor.getRowBottom(row) + editor.getRowTop(row)) / 2f - (metricsLineNumber.descent - metricsLineNumber.ascent) / 2f - metricsLineNumber.ascent - editor.getOffsetY();
 
-        var buffer = TemporaryCharBuffer.obtain(20);
-        final int displayLine = line + 1;
-        int i = stringSize(displayLine);
-        Numbers.getChars(displayLine, i, buffer);
+            var buffer = TemporaryCharBuffer.obtain(20);
+            final int displayLine = line + 1;
+            int i = stringSize(displayLine);
+            Numbers.getChars(displayLine, i, buffer);
 
-        switch (editor.getLineNumberAlign()) {
-            case LEFT:
-                canvas.drawText(buffer, 0, i, offsetX, y, paintOther);
-                break;
-            case RIGHT:
-                canvas.drawText(buffer, 0, i, offsetX + numberWidth, y, paintOther);
-                break;
-            case CENTER:
-                canvas.drawText(buffer, 0, i, offsetX + (numberWidth + editor.getDividerMarginLeft()) / 2f, y, paintOther);
+            switch (editor.getLineNumberAlign()) {
+                case LEFT:
+                    canvas.drawText(buffer, 0, i, offsetX, y, paintOther);
+                    break;
+                case RIGHT:
+                    canvas.drawText(buffer, 0, i, offsetX + numberWidth, y, paintOther);
+                    break;
+                case CENTER:
+                    canvas.drawText(buffer, 0, i, offsetX + (numberWidth + editor.getDividerMarginLeft()) / 2f, y, paintOther);
+            }
+            TemporaryCharBuffer.recycle(buffer);
         }
-        TemporaryCharBuffer.recycle(buffer);
 
         if (foldingEnabled) {
             final var region = editor.getFoldingManager().getFoldRegion(lineIndex);
             if (region != null) {
                 drawFoldingIcon(canvas, offsetX, width, row, region.collapsed);
             }
+        }
+    }
+    
+    /**
+     * Draw a breakpoint circle in place of the line number
+     */
+    private void drawBreakpointCircle(Canvas canvas, int row, float offsetX, float numberWidth, LineBreakpoint breakpoint) {
+        // Calculate circle size based on row height
+        float rowHeight = editor.getRowHeight();
+        float circleSize = rowHeight * 0.75f;  // Circle is 75% of row height for better visibility
+        
+        // Calculate center position
+        float centerX = offsetX + numberWidth / 2f;
+        float centerY = (editor.getRowBottom(row) + editor.getRowTop(row)) / 2f - editor.getOffsetY();
+        
+        // Get breakpoint color
+        int breakpointColor = breakpoint.getColor().resolve(editor.getColorScheme());
+        
+        // Apply alpha if breakpoint is disabled
+        if (!breakpoint.getEnabled()) {
+            breakpointColor = (breakpointColor & 0x00FFFFFF) | 0x80000000;  // 50% alpha
+        }
+        
+        // Draw the circle
+        paintGeneral.setColor(breakpointColor);
+        canvas.drawCircle(centerX, centerY, circleSize / 2f, paintGeneral);
+        
+        // If not verified, draw a hollow circle outline
+        if (!breakpoint.getVerified() && breakpoint.getEnabled()) {
+            paintGeneral.setStyle(android.graphics.Paint.Style.STROKE);
+            paintGeneral.setStrokeWidth(editor.getDpUnit() * 1.5f);
+            paintGeneral.setColor(0xFFFFFFFF);  // White outline
+            canvas.drawCircle(centerX, centerY, circleSize / 2f - editor.getDpUnit(), paintGeneral);
+            paintGeneral.setStyle(android.graphics.Paint.Style.FILL);
         }
     }
 
@@ -974,6 +1018,14 @@ public class EditorRenderer {
         final int oldColor = paintGraph.getColor();
         final var oldStyle = paintGraph.getStyle();
         paintGraph.setStyle(android.graphics.Paint.Style.FILL);
+
+        // Optional background to make the clickable area more discoverable
+        final int bg = editor.getColorScheme().getColor(EditorColorScheme.FOLDING_ICON_BACKGROUND);
+        if (bg != 0) {
+            tmpRect.set(left, top, right, bottom);
+            drawColorRound(canvas, bg, tmpRect);
+        }
+
         paintGraph.setColor(editor.getColorScheme().getColor(EditorColorScheme.FOLDING_ICON));
 
         tmpPath.reset();
@@ -1713,29 +1765,72 @@ public class EditorRenderer {
     }
 
     private void drawFoldingPlaceholder(Canvas canvas, int row, float offsetCopy) {
-        final String placeholder = editor.getProps().foldingPlaceholder;
+        String placeholder = editor.getProps().foldingPlaceholder;
         if (placeholder == null || placeholder.isEmpty()) {
             return;
         }
-        final float beginOffset = Math.max(0, offsetCopy);
-        final float endOffset = beginOffset + editor.getWidth();
         final float paddingX = editor.getDpUnit() * 3f;
         final float paddingY = editor.getDpUnit() * 1.5f;
 
         final int oldColor = paintGeneral.getColor();
-        final float textWidth = paintGeneral.measureText(placeholder);
-        final float x = Math.max(beginOffset + paddingX, endOffset - textWidth - paddingX);
         final float baseline = editor.getRowBaseline(0);
+        
+        // Get the line index for this row
+        var rowInfo = editor.getLayout().getRowAt(row);
+        int line = rowInfo.lineIndex;
+        
+        // Get the fold region to find the closing brace
+        var foldRegion = editor.getFoldingManager().getFoldRegion(line);
+        if (foldRegion == null) {
+            return;
+        }
+        
+        // Get the end line content to find the closing character
+        var endLineContent = getLine(foldRegion.endLine);
+        String endLineText = endLineContent.toString().trim();
+        
+        // Find the closing bracket/brace
+        String closingChar = "";
+        if (endLineText.endsWith("}")) {
+            closingChar = "}";
+        } else if (endLineText.endsWith(")")) {
+            closingChar = ")";
+        } else if (endLineText.endsWith("]")) {
+            closingChar = "]";
+        }
+        
+        final float placeholderWidth = paintGeneral.measureText(placeholder);
+        final float closingCharWidth = closingChar.isEmpty() ? 0 : paintGeneral.measureText(closingChar);
+        
+        // Calculate the x position at the end of the line content
+        // Use the trailing row's end column to get the text width
+        var tr = createTextRow(row);
+        float lineEndX = tr.computeRowWidth();
+        
+        // Position the placeholder right after the line content
+        float x = lineEndX + paddingX;
 
         canvas.save();
         canvas.translate(-offsetCopy, editor.getRowTop(row) - editor.getOffsetY());
+        
+        // Draw the placeholder background (only for "...")
         tmpRect.left = x - paddingX;
-        tmpRect.right = x + textWidth + paddingX;
+        tmpRect.right = x + placeholderWidth + paddingX;
         tmpRect.top = editor.getRowTopOfText(0) - paddingY;
         tmpRect.bottom = editor.getRowBottomOfText(0) + paddingY;
         drawColorRound(canvas, editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_BACKGROUND), tmpRect);
+        
+        // Draw the placeholder text "..."
         paintGeneral.setColor(editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_COLOR));
         canvas.drawText(placeholder, x, baseline, paintGeneral);
+        
+        // Draw the closing bracket with normal text color (no background)
+        if (!closingChar.isEmpty()) {
+            float closingX = x + placeholderWidth + paddingX;
+            paintGeneral.setColor(editor.getColorScheme().getColor(EditorColorScheme.TEXT_NORMAL));
+            canvas.drawText(closingChar, closingX, baseline, paintGeneral);
+        }
+        
         canvas.restore();
 
         paintGeneral.setColor(oldColor);

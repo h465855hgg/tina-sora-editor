@@ -1701,8 +1701,10 @@ public class CodeEditor extends View implements ContentListener, Formatter.Forma
         }
         float result = single * count + lineNumberMarginLeft;
         if (props.foldingEnabled) {
-            // Reserve some space for folding icon in line number region
-            result += props.foldingIconSize * dpUnit + dpUnit * 4f;
+            // Reserve space for folding icon on the right side of the line number region
+            final float iconSize = props.foldingIconSize * dpUnit;
+            final float padding = dpUnit * 2f;
+            result += iconSize + padding * 2f;
         }
         return result;
     }
@@ -4297,11 +4299,20 @@ public class CodeEditor extends View implements ContentListener, Formatter.Forma
         }
         final var region = foldingManager.getFoldRegion(startLine);
         if (region == null) {
+            if (props.foldingDebugLogEnabled) {
+                Log.d(LOG_TAG, "folding: toggleFold startLine=" + startLine + " region=null");
+            }
             return false;
         }
         final boolean changed = foldingManager.toggle(startLine);
         if (!changed) {
+            if (props.foldingDebugLogEnabled) {
+                Log.d(LOG_TAG, "folding: toggleFold startLine=" + startLine + " changed=false collapsed=" + foldingManager.isCollapsed(startLine));
+            }
             return false;
+        }
+        if (props.foldingDebugLogEnabled) {
+            Log.d(LOG_TAG, "folding: toggleFold startLine=" + startLine + " -> collapsed=" + foldingManager.isCollapsed(startLine) + " region=(" + region.startLine + "," + region.endLine + ")");
         }
         if (foldingManager.isCollapsed(startLine) && foldingManager.isLineHidden(cursor.getLeftLine())) {
             setSelection(startLine, Math.min(cursor.getLeftColumn(), text.getColumnCount(startLine)), SelectionChangeEvent.CAUSE_TAP);

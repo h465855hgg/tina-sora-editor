@@ -232,7 +232,8 @@ open class TsAnalyzeManager(val languageSpec: TsLanguageSpec, var theme: TsTheme
                                 block.endLine = end.row
                                 block.endColumn = end.column / 2
                             }
-                            if (block.endLine - block.startLine > 1) {
+                            // A block is foldable when it spans more than one line (i.e. it can hide at least 1 line)
+                            if (block.endLine > block.startLine) {
                                 blocks.add(block)
                             }
                         }

@@ -346,6 +346,11 @@ public class DirectAccessProps implements Serializable {
     public boolean foldingEnabled = true;
 
     /**
+     * 是否输出折叠相关调试日志（仅用于定位问题，默认关闭）。
+     */
+    public boolean foldingDebugLogEnabled = false;
+
+    /**
      * 折叠图标大小（dp）。
      */
     @InvalidateRequired

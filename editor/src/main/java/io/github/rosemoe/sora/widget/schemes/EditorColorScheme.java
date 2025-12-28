@@ -425,7 +425,7 @@ public class EditorColorScheme {
                 color = isDark() ? 0xffbdbdbd : 0xff616161;
                 break;
             case FOLDING_ICON_BACKGROUND:
-                color = 0;
+                color = isDark() ? 0x14ffffff : 0x14000000;
                 break;
             case FOLDED_TEXT_BACKGROUND:
                 color = isDark() ? 0x26ffffff : 0x1D000000;

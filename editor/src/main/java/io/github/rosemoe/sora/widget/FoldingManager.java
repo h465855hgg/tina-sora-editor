@@ -23,6 +23,7 @@
  */
 package io.github.rosemoe.sora.widget;
 
+import android.util.Log;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
@@ -42,6 +43,8 @@ import io.github.rosemoe.sora.lang.styling.Styles;
  * 折叠后隐藏 (startLine, endLine] 的所有行，但 startLine 自身仍保持可见。
  */
 public final class FoldingManager {
+
+    private static final String TAG = "SoraFolding";
 
     private final CodeEditor editor;
 
@@ -184,24 +187,39 @@ public final class FoldingManager {
 
     public boolean fold(int startLine) {
         if (!isFoldableLine(startLine)) {
+            if (editor.getProps().foldingDebugLogEnabled) {
+                Log.d(TAG, "fold: startLine=" + startLine + " not foldable (foldables=" + foldableEndsByStartLine.size() + ")");
+            }
             return false;
         }
         if (collapsedByStartLine.get(startLine)) {
+            if (editor.getProps().foldingDebugLogEnabled) {
+                Log.d(TAG, "fold: startLine=" + startLine + " already collapsed");
+            }
             return false;
         }
         collapsedByStartLine.put(startLine, true);
         rebuildHiddenRanges();
         mappingDirty = true;
+        if (editor.getProps().foldingDebugLogEnabled) {
+            Log.d(TAG, "fold: startLine=" + startLine + " endLine=" + foldableEndsByStartLine.get(startLine) + " hiddenRanges=" + hiddenRanges.size());
+        }
         return true;
     }
 
     public boolean unfold(int startLine) {
         if (!collapsedByStartLine.get(startLine)) {
+            if (editor.getProps().foldingDebugLogEnabled) {
+                Log.d(TAG, "unfold: startLine=" + startLine + " not collapsed");
+            }
             return false;
         }
         collapsedByStartLine.delete(startLine);
         rebuildHiddenRanges();
         mappingDirty = true;
+        if (editor.getProps().foldingDebugLogEnabled) {
+            Log.d(TAG, "unfold: startLine=" + startLine + " hiddenRanges=" + hiddenRanges.size());
+        }
         return true;
     }
 
