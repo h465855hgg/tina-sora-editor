@@ -338,6 +338,32 @@ public class DirectAccessProps implements Serializable {
     public final static int LN_ACTION_PLACE_SELECTION_HOME = 2;
 
     /**
+     * 是否启用代码折叠功能。
+     * <p>
+     * 注意：若直接修改该字段，需调用 {@link CodeEditor#setFoldingEnabled(boolean)} 触发布局刷新。
+     */
+    @InvalidateRequired
+    public boolean foldingEnabled = true;
+
+    /**
+     * 折叠图标大小（dp）。
+     */
+    @InvalidateRequired
+    public float foldingIconSize = 12f;
+
+    /**
+     * 折叠占位符文本。
+     */
+    public String foldingPlaceholder = "...";
+
+    /**
+     * 是否在鼠标悬停时显示折叠图标（桌面模式）。
+     * <p>
+     * 目前仅保留配置项，具体交互由上层决定。
+     */
+    public boolean showFoldingIconOnHover = false;
+
+    /**
      * Format pasted text (when text is pasted by {@link CodeEditor#pasteText()})
      */
     public boolean formatPastedText = false;

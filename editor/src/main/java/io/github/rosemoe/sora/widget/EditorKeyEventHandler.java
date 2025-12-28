@@ -168,6 +168,46 @@ public class EditorKeyEventHandler {
         final var editorCursor = editor.getCursor();
         final var editorText = editor.getText();
         switch (keyCode) {
+            case KeyEvent.KEYCODE_LEFT_BRACKET: {
+                if (!isCtrlPressed) {
+                    return null;
+                }
+                if (editor.isFoldingEnabled() && !isAltPressed && isShiftPressed) {
+                    final int line = editorCursor.getLeftLine();
+                    final int startLine = editor.getFoldingManager().findFoldableStartLineForLine(line);
+                    if (startLine >= 0) {
+                        editor.fold(startLine);
+                        editor.ensureSelectionVisible();
+                        return keybindingEvent.result(true) || editorKeyEvent.result(true);
+                    }
+                }
+                if (editor.isFoldingEnabled() && isAltPressed && !isShiftPressed) {
+                    editor.foldAll();
+                    editor.ensureSelectionVisible();
+                    return keybindingEvent.result(true) || editorKeyEvent.result(true);
+                }
+                return null;
+            }
+            case KeyEvent.KEYCODE_RIGHT_BRACKET: {
+                if (!isCtrlPressed) {
+                    return null;
+                }
+                if (editor.isFoldingEnabled() && !isAltPressed && isShiftPressed) {
+                    final int line = editorCursor.getLeftLine();
+                    final int startLine = editor.getFoldingManager().findCollapsedStartLineForLine(line);
+                    if (startLine >= 0) {
+                        editor.unfold(startLine);
+                        editor.ensureSelectionVisible();
+                        return keybindingEvent.result(true) || editorKeyEvent.result(true);
+                    }
+                }
+                if (editor.isFoldingEnabled() && isAltPressed && !isShiftPressed) {
+                    editor.unfoldAll();
+                    editor.ensureSelectionVisible();
+                    return keybindingEvent.result(true) || editorKeyEvent.result(true);
+                }
+                return null;
+            }
             case KeyEvent.KEYCODE_BACK: {
                 if (editorCursor.isSelected()) {
                     editor.setSelection(editorCursor.getLeftLine(), editorCursor.getLeftColumn());

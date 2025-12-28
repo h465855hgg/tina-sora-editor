@@ -180,6 +180,9 @@ public class WordwrapLayout extends AbstractLayout {
         }
         List<RowRegion> newRegions = new ArrayList<>();
         for (int i = startLine; i <= endLine; i++) {
+            if (editor.isFoldingEnabled() && editor.isLineHiddenByFolding(i)) {
+                continue;
+            }
             newRegions.addAll(breakLine(i, text.getLine(i), null));
         }
         rowTable.addAll(insertPosition, newRegions);
@@ -267,15 +270,16 @@ public class WordwrapLayout extends AbstractLayout {
 
     @NonNull
     @Override
-    public Row getRowAt(int rowIndex) {
+        public Row getRowAt(int rowIndex) {
         if (rowTable.isEmpty()) {
             var r = new Row();
+            final int line = editor.isFoldingEnabled() ? editor.getFoldingManager().getLineForVisibleRow(rowIndex) : rowIndex;
             r.startColumn = 0;
-            r.endColumn = text.getColumnCount(rowIndex);
+            r.endColumn = text.getColumnCount(line);
             r.isLeadingRow = true;
             r.isTrailingRow = true;
-            r.lineIndex = rowIndex;
-            r.inlayHints = getInlayHints(rowIndex);
+            r.lineIndex = line;
+            r.inlayHints = getInlayHints(line);
             return r;
         }
         var region = rowTable.get(rowIndex);
@@ -287,6 +291,9 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public int getLineNumberForRow(int row) {
         if (rowTable.isEmpty()) {
+            if (editor.isFoldingEnabled()) {
+                return editor.getFoldingManager().getLineForVisibleRow(row);
+            }
             return Math.max(0, Math.min(row, text.getLineCount() - 1));
         }
         return row >= rowTable.size() ? rowTable.get(rowTable.size() - 1).line : rowTable.get(row).line;
@@ -301,14 +308,22 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public long getUpPosition(int line, int column) {
         if (rowTable.isEmpty()) {
-            if (line - 1 < 0) {
-                return IntPair.pack(0, 0);
+            if (editor.isFoldingEnabled()) {
+                final int row = editor.getFoldingManager().getVisibleRowForLine(line);
+                final int prevRow = Math.max(0, row - 1);
+                final int prevLine = editor.getFoldingManager().getLineForVisibleRow(prevRow);
+                final int prevColumnCount = text.getColumnCount(prevLine);
+                return IntPair.pack(prevLine, Math.min(column, prevColumnCount));
+            } else {
+                if (line - 1 < 0) {
+                    return IntPair.pack(0, 0);
+                }
+                int c_column = text.getColumnCount(line - 1);
+                if (column > c_column) {
+                    column = c_column;
+                }
+                return IntPair.pack(line - 1, column);
             }
-            int c_column = text.getColumnCount(line - 1);
-            if (column > c_column) {
-                column = c_column;
-            }
-            return IntPair.pack(line - 1, column);
         }
         int row = findRow(line, column);
         if (row > 0) {
@@ -324,15 +339,23 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public long getDownPosition(int line, int column) {
         if (rowTable.isEmpty()) {
-            int c_line = text.getLineCount();
-            if (line + 1 >= c_line) {
-                return IntPair.pack(line, text.getColumnCount(line));
+            if (editor.isFoldingEnabled()) {
+                final int row = editor.getFoldingManager().getVisibleRowForLine(line);
+                final int nextRow = Math.min(row + 1, Math.max(0, editor.getFoldingManager().getVisibleRowCount() - 1));
+                final int nextLine = editor.getFoldingManager().getLineForVisibleRow(nextRow);
+                final int nextColumnCount = text.getColumnCount(nextLine);
+                return IntPair.pack(nextLine, Math.min(column, nextColumnCount));
             } else {
-                int c_column = text.getColumnCount(line + 1);
-                if (column > c_column) {
-                    column = c_column;
+                int c_line = text.getLineCount();
+                if (line + 1 >= c_line) {
+                    return IntPair.pack(line, text.getColumnCount(line));
+                } else {
+                    int c_column = text.getColumnCount(line + 1);
+                    if (column > c_column) {
+                        column = c_column;
+                    }
+                    return IntPair.pack(line + 1, column);
                 }
-                return IntPair.pack(line + 1, column);
             }
         }
         int row = findRow(line, column);
@@ -355,6 +378,9 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public int getLayoutHeight() {
         if (rowTable.isEmpty()) {
+            if (editor.isFoldingEnabled()) {
+                return editor.getRowHeight() * editor.getFoldingManager().getVisibleRowCount();
+            }
             return editor.getRowHeight() * text.getLineCount();
         }
         return rowTable.size() * editor.getRowHeight();
@@ -365,6 +391,9 @@ public class WordwrapLayout extends AbstractLayout {
         var pos = editor.getText().getIndexer().getCharPosition(index);
         var line = pos.line;
         if (rowTable.isEmpty()) {
+            if (editor.isFoldingEnabled()) {
+                return editor.getFoldingManager().getVisibleRowForLine(line);
+            }
             return line;
         }
         var column = pos.column;
@@ -399,8 +428,9 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public long getCharPositionForLayoutOffset(float xOffset, float yOffset) {
         if (rowTable.isEmpty()) {
-            int lineCount = text.getLineCount();
-            int line = Math.min(lineCount - 1, Math.max((int) (yOffset / editor.getRowHeight()), 0));
+            final int rowCount = editor.isFoldingEnabled() ? editor.getFoldingManager().getVisibleRowCount() : text.getLineCount();
+            final int row = Math.min(Math.max((int) (yOffset / editor.getRowHeight()), 0), Math.max(0, rowCount - 1));
+            final int line = editor.isFoldingEnabled() ? editor.getFoldingManager().getLineForVisibleRow(row) : Math.min(text.getLineCount() - 1, row);
             var tr = editor.getRenderer().createTextRow(line);
             int res = tr.getIndexForCursorOffset(xOffset);
             return IntPair.pack(line, res);
@@ -424,7 +454,11 @@ public class WordwrapLayout extends AbstractLayout {
             dest = new float[2];
         }
         if (rowTable.isEmpty()) {
-            dest[0] = editor.getRowBottom(line);
+            if (editor.isFoldingEnabled()) {
+                dest[0] = editor.getRowBottom(editor.getFoldingManager().getVisibleRowForLine(line));
+            } else {
+                dest[0] = editor.getRowBottom(line);
+            }
             var tr = editor.getRenderer().createTextRow(line);
             dest[1] = tr.getCursorOffsetForIndex(column);
             return dest;
@@ -461,6 +495,9 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public int getRowCountForLine(int line) {
         if (rowTable.isEmpty()) {
+            if (editor.isFoldingEnabled()) {
+                return editor.isLineHiddenByFolding(line) ? 0 : 1;
+            }
             return 1;
         }
         int row = findRow(line);
@@ -494,6 +531,9 @@ public class WordwrapLayout extends AbstractLayout {
     @Override
     public int getRowCount() {
         if (rowTable.isEmpty()) {
+            if (editor.isFoldingEnabled()) {
+                return editor.getFoldingManager().getVisibleRowCount();
+            }
             return text.getLineCount();
         }
         return rowTable.size();
@@ -619,7 +659,9 @@ public class WordwrapLayout extends AbstractLayout {
         protected WordwrapResult compute() {
             var list = new ArrayList<RowRegion>();
             text.runReadActionsOnLines(start, end, (int index, ContentLine line, Content.ContentLineConsumer2.AbortFlag abortFlag) -> {
-                list.addAll(breakLine(index, line, paint));
+                if (!(editor.isFoldingEnabled() && editor.isLineHiddenByFolding(index))) {
+                    list.addAll(breakLine(index, line, paint));
+                }
                 if (!shouldRun()) {
                     abortFlag.set = true;
                 }

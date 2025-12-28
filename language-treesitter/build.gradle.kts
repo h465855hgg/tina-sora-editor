@@ -45,7 +45,7 @@ android {
 }
 
 dependencies {
-    compileOnly(projects.editor)
+    compileOnly(project(":sora-editor:editor"))
     api(libs.tree.sitter)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)

@@ -54,8 +54,8 @@ android {
 }
 
 dependencies {
-    compileOnly(projects.editor)
-    compileOnly(projects.onigurumaNative)
+    compileOnly(project(":sora-editor:editor"))
+    compileOnly(project(":sora-editor:oniguruma-native"))
 
     implementation(libs.gson)
     implementation(libs.jcodings)

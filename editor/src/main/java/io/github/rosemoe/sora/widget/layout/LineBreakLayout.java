@@ -169,6 +169,9 @@ public class LineBreakLayout extends AbstractLayout {
 
     @Override
     public int getRowCount() {
+        if (editor.isFoldingEnabled()) {
+            return editor.getFoldingManager().getVisibleRowCount();
+        }
         return text.getLineCount();
     }
 
@@ -219,18 +222,22 @@ public class LineBreakLayout extends AbstractLayout {
     @Override
     public Row getRowAt(int rowIndex) {
         var row = new Row();
-        row.lineIndex = rowIndex;
+        row.lineIndex = getLineNumberForRow(rowIndex);
         row.startColumn = 0;
         row.isLeadingRow = true;
         row.isTrailingRow = true;
-        row.endColumn = text.getColumnCount(rowIndex);
-        row.inlayHints = getInlayHints(rowIndex);
+        row.endColumn = text.getColumnCount(row.lineIndex);
+        row.inlayHints = getInlayHints(row.lineIndex);
         return row;
     }
 
     @Override
     public int getRowIndexForPosition(int index) {
-        return editor.getText().getIndexer().getCharPosition(index).line;
+        final int line = editor.getText().getIndexer().getCharPosition(index).line;
+        if (editor.isFoldingEnabled()) {
+            return editor.getFoldingManager().getVisibleRowForLine(line);
+        }
+        return line;
     }
 
     @Override
@@ -242,6 +249,9 @@ public class LineBreakLayout extends AbstractLayout {
 
     @Override
     public int getLineNumberForRow(int row) {
+        if (editor.isFoldingEnabled()) {
+            return editor.getFoldingManager().getLineForVisibleRow(row);
+        }
         return Math.max(0, Math.min(row, text.getLineCount() - 1));
     }
 
@@ -252,13 +262,14 @@ public class LineBreakLayout extends AbstractLayout {
 
     @Override
     public int getLayoutHeight() {
-        return text.getLineCount() * editor.getRowHeight();
+        return getRowCount() * editor.getRowHeight();
     }
 
     @Override
     public long getCharPositionForLayoutOffset(float xOffset, float yOffset) {
-        int lineCount = text.getLineCount();
-        int line = Math.min(lineCount - 1, Math.max((int) (yOffset / editor.getRowHeight()), 0));
+        final int rowCount = getRowCount();
+        final int row = Math.min(Math.max((int) (yOffset / editor.getRowHeight()), 0), Math.max(0, rowCount - 1));
+        final int line = getLineNumberForRow(row);
         var tr = editor.getRenderer().createTextRow(line);
         int res = tr.getIndexForCursorOffset(xOffset);
         return IntPair.pack(line, res);
@@ -270,7 +281,11 @@ public class LineBreakLayout extends AbstractLayout {
         if (dest == null || dest.length < 2) {
             dest = new float[2];
         }
-        dest[0] = editor.getRowBottom(line);
+        if (editor.isFoldingEnabled()) {
+            dest[0] = editor.getRowBottom(editor.getFoldingManager().getVisibleRowForLine(line));
+        } else {
+            dest[0] = editor.getRowBottom(line);
+        }
         var tr = editor.getRenderer().createTextRow(line);
         dest[1] = tr.getCursorOffsetForIndex(column);
         return dest;
@@ -278,11 +293,21 @@ public class LineBreakLayout extends AbstractLayout {
 
     @Override
     public int getRowCountForLine(int line) {
+        if (editor.isFoldingEnabled()) {
+            return editor.isLineHiddenByFolding(line) ? 0 : 1;
+        }
         return 1;
     }
 
     @Override
     public long getDownPosition(int line, int column) {
+        if (editor.isFoldingEnabled()) {
+            final int row = editor.getFoldingManager().getVisibleRowForLine(line);
+            final int nextRow = Math.min(row + 1, Math.max(0, getRowCount() - 1));
+            final int nextLine = getLineNumberForRow(nextRow);
+            final int nextColumnCount = text.getColumnCount(nextLine);
+            return IntPair.pack(nextLine, Math.min(column, nextColumnCount));
+        }
         int c_line = text.getLineCount();
         if (line + 1 >= c_line) {
             return IntPair.pack(line, text.getColumnCount(line));
@@ -297,6 +322,13 @@ public class LineBreakLayout extends AbstractLayout {
 
     @Override
     public long getUpPosition(int line, int column) {
+        if (editor.isFoldingEnabled()) {
+            final int row = editor.getFoldingManager().getVisibleRowForLine(line);
+            final int prevRow = Math.max(0, row - 1);
+            final int prevLine = getLineNumberForRow(prevRow);
+            final int prevColumnCount = text.getColumnCount(prevLine);
+            return IntPair.pack(prevLine, Math.min(column, prevColumnCount));
+        }
         if (line - 1 < 0) {
             return IntPair.pack(0, 0);
         }
@@ -352,10 +384,10 @@ public class LineBreakLayout extends AbstractLayout {
             if (!hasNext()) {
                 throw new NoSuchElementException();
             }
-            result.lineIndex = currentRow;
-            var line = preloadedLines != null ? preloadedLines.get(currentRow) : null;
+            result.lineIndex = layout.getLineNumberForRow(currentRow);
+            var line = preloadedLines != null ? preloadedLines.get(result.lineIndex) : null;
             if (line == null) {
-                line = text.getLine(currentRow);
+                line = text.getLine(result.lineIndex);
             }
             result.endColumn = line.length();
             result.inlayHints = layout.getInlayHints(result.lineIndex);
@@ -365,7 +397,7 @@ public class LineBreakLayout extends AbstractLayout {
 
         @Override
         public boolean hasNext() {
-            return currentRow >= 0 && currentRow < text.getLineCount();
+            return currentRow >= 0 && currentRow < layout.getRowCount();
         }
 
         @Override

@@ -915,6 +915,14 @@ public class EditorRenderer {
         if (width + offsetX <= 0) {
             return;
         }
+        final int lineIndex = line;
+        final boolean foldingEnabled = editor.isFoldingEnabled();
+        float numberWidth = width;
+        if (foldingEnabled) {
+            final float iconSize = editor.getProps().foldingIconSize * editor.getDpUnit();
+            final float padding = editor.getDpUnit() * 2f;
+            numberWidth = Math.max(0f, width - (iconSize + padding * 2f));
+        }
         if (paintOther.getTextAlign() != editor.getLineNumberAlign()) {
             paintOther.setTextAlign(editor.getLineNumberAlign());
         }
@@ -923,21 +931,68 @@ public class EditorRenderer {
         float y = (editor.getRowBottom(row) + editor.getRowTop(row)) / 2f - (metricsLineNumber.descent - metricsLineNumber.ascent) / 2f - metricsLineNumber.ascent - editor.getOffsetY();
 
         var buffer = TemporaryCharBuffer.obtain(20);
-        line++;
-        int i = stringSize(line);
-        Numbers.getChars(line, i, buffer);
+        final int displayLine = line + 1;
+        int i = stringSize(displayLine);
+        Numbers.getChars(displayLine, i, buffer);
 
         switch (editor.getLineNumberAlign()) {
             case LEFT:
                 canvas.drawText(buffer, 0, i, offsetX, y, paintOther);
                 break;
             case RIGHT:
-                canvas.drawText(buffer, 0, i, offsetX + width, y, paintOther);
+                canvas.drawText(buffer, 0, i, offsetX + numberWidth, y, paintOther);
                 break;
             case CENTER:
-                canvas.drawText(buffer, 0, i, offsetX + (width + editor.getDividerMarginLeft()) / 2f, y, paintOther);
+                canvas.drawText(buffer, 0, i, offsetX + (numberWidth + editor.getDividerMarginLeft()) / 2f, y, paintOther);
         }
         TemporaryCharBuffer.recycle(buffer);
+
+        if (foldingEnabled) {
+            final var region = editor.getFoldingManager().getFoldRegion(lineIndex);
+            if (region != null) {
+                drawFoldingIcon(canvas, offsetX, width, row, region.collapsed);
+            }
+        }
+    }
+
+    private void drawFoldingIcon(Canvas canvas, float offsetX, float width, int row, boolean collapsed) {
+        final float size = editor.getProps().foldingIconSize * editor.getDpUnit();
+        if (size <= 0f) {
+            return;
+        }
+        final float padding = editor.getDpUnit() * 2f;
+        final float right = offsetX + width - padding;
+        final float left = right - size;
+        if (right <= offsetX) {
+            return;
+        }
+
+        final float centerY = (editor.getRowBottom(row) + editor.getRowTop(row)) / 2f - editor.getOffsetY();
+        final float top = centerY - size / 2f;
+        final float bottom = top + size;
+
+        final int oldColor = paintGraph.getColor();
+        final var oldStyle = paintGraph.getStyle();
+        paintGraph.setStyle(android.graphics.Paint.Style.FILL);
+        paintGraph.setColor(editor.getColorScheme().getColor(EditorColorScheme.FOLDING_ICON));
+
+        tmpPath.reset();
+        if (collapsed) {
+            // ▶
+            tmpPath.moveTo(left + size * 0.35f, top + size * 0.25f);
+            tmpPath.lineTo(left + size * 0.35f, top + size * 0.75f);
+            tmpPath.lineTo(left + size * 0.75f, top + size * 0.5f);
+        } else {
+            // ▼
+            tmpPath.moveTo(left + size * 0.25f, top + size * 0.35f);
+            tmpPath.lineTo(left + size * 0.75f, top + size * 0.35f);
+            tmpPath.lineTo(left + size * 0.5f, top + size * 0.75f);
+        }
+        tmpPath.close();
+        canvas.drawPath(tmpPath, paintGraph);
+
+        paintGraph.setColor(oldColor);
+        paintGraph.setStyle(oldStyle);
     }
 
     /**
@@ -1437,6 +1492,14 @@ public class EditorRenderer {
                 }
             }
 
+            // Draw folding placeholder on the trailing row of a collapsed region start line
+            if (editor.isFoldingEnabled() && rowInf.isTrailingRow) {
+                final var foldRegion = editor.getFoldingManager().getFoldRegion(line);
+                if (foldRegion != null && foldRegion.collapsed) {
+                    drawFoldingPlaceholder(canvas, row, offsetCopy);
+                }
+            }
+
             // Recover the offset
             paintingOffset = backupOffset;
 
@@ -1647,6 +1710,35 @@ public class EditorRenderer {
                 break;
             }
         }
+    }
+
+    private void drawFoldingPlaceholder(Canvas canvas, int row, float offsetCopy) {
+        final String placeholder = editor.getProps().foldingPlaceholder;
+        if (placeholder == null || placeholder.isEmpty()) {
+            return;
+        }
+        final float beginOffset = Math.max(0, offsetCopy);
+        final float endOffset = beginOffset + editor.getWidth();
+        final float paddingX = editor.getDpUnit() * 3f;
+        final float paddingY = editor.getDpUnit() * 1.5f;
+
+        final int oldColor = paintGeneral.getColor();
+        final float textWidth = paintGeneral.measureText(placeholder);
+        final float x = Math.max(beginOffset + paddingX, endOffset - textWidth - paddingX);
+        final float baseline = editor.getRowBaseline(0);
+
+        canvas.save();
+        canvas.translate(-offsetCopy, editor.getRowTop(row) - editor.getOffsetY());
+        tmpRect.left = x - paddingX;
+        tmpRect.right = x + textWidth + paddingX;
+        tmpRect.top = editor.getRowTopOfText(0) - paddingY;
+        tmpRect.bottom = editor.getRowBottomOfText(0) + paddingY;
+        drawColorRound(canvas, editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_BACKGROUND), tmpRect);
+        paintGeneral.setColor(editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_COLOR));
+        canvas.drawText(placeholder, x, baseline, paintGeneral);
+        canvas.restore();
+
+        paintGeneral.setColor(oldColor);
     }
 
     protected void drawDiagnosticIndicators(Canvas canvas, float offset) {

@@ -90,6 +90,11 @@ public class EditorColorScheme {
     public static final int KEYWORD = 21;
     //-------------View colors---------------------
     public static final int STICKY_SCROLL_DIVIDER = 62;
+    //-------------Folding colors------------------
+    public static final int FOLDING_ICON = 81;
+    public static final int FOLDING_ICON_BACKGROUND = 82;
+    public static final int FOLDED_TEXT_BACKGROUND = 83;
+    public static final int FOLDED_TEXT_COLOR = 84;
     /**
      * Color for text strikethrough. If value is 0, text color of that region will be used.
      */
@@ -183,7 +188,7 @@ public class EditorColorScheme {
     /**
      * Max pre-defined color id
      */
-    protected static final int END_COLOR_ID = 80;
+    protected static final int END_COLOR_ID = 84;
 
 
     /**
@@ -415,6 +420,18 @@ public class EditorColorScheme {
                 break;
             case STICKY_SCROLL_DIVIDER:
                 color = 0x99eeeeee;
+                break;
+            case FOLDING_ICON:
+                color = isDark() ? 0xffbdbdbd : 0xff616161;
+                break;
+            case FOLDING_ICON_BACKGROUND:
+                color = 0;
+                break;
+            case FOLDED_TEXT_BACKGROUND:
+                color = isDark() ? 0x26ffffff : 0x1D000000;
+                break;
+            case FOLDED_TEXT_COLOR:
+                color = isDark() ? 0xffeeeeee : 0xff000000;
                 break;
             case TEXT_INLAY_HINT_BACKGROUND:
                 color = isDark() ? 0x1deeeeee : 0x1D000000;

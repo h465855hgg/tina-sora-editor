@@ -43,7 +43,7 @@ android {
 }
 
 dependencies {
-    compileOnly(projects.editor)
-    implementation(libs.lsp4j)
+    compileOnly(project(":sora-editor:editor"))
+    api(libs.lsp4j)
     implementation(libs.kotlinx.coroutines)
 }

@@ -27,10 +27,19 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
     includeBuild("build-logic")
+    includeBuild("../tina-android-tree-sitter/build-logic")
     repositories {
         gradlePluginPortal()
         google()
         mavenCentral()
+    }
+}
+
+// 包含本地的 tina-android-tree-sitter 项目
+includeBuild("../tina-android-tree-sitter") {
+    dependencySubstitution {
+        substitute(module("com.itsaky.androidide.treesitter:android-tree-sitter")).using(project(":android-tree-sitter"))
+        substitute(module("com.itsaky.androidide.treesitter:tree-sitter-java")).using(project(":tree-sitter-java"))
     }
 }
 

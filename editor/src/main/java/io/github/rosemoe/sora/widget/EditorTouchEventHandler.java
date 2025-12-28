@@ -850,13 +850,33 @@ public final class EditorTouchEventHandler implements GestureDetector.OnGestureL
         int column = IntPair.getSecond(res);
         editor.performClick();
         if (region == RegionResolverKt.REGION_SIDE_ICON) {
-            int row = (int) (e.getY() + editor.getOffsetX()) / editor.getRowHeight();
+            int row = (int) (e.getY() + editor.getOffsetY()) / editor.getRowHeight();
             row = Math.max(0, Math.min(row, editor.getLayout().getRowCount() - 1));
             var inf = editor.getLayout().getRowAt(row);
             if (inf.isLeadingRow) {
                 var style = editor.getRenderer().getLineStyle(inf.lineIndex, LineSideIcon.class);
                 if (style != null) {
                     if ((editor.dispatchEvent(new SideIconClickEvent(editor, style)) & InterceptTarget.TARGET_EDITOR) != 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        if (region == RegionResolverKt.REGION_LINE_NUMBER && editor.isFoldingEnabled()) {
+            final float layoutX = e.getX() + editor.getOffsetX();
+            final float lineNumberWidth = editor.measureLineNumber();
+            final float iconSize = editor.getProps().foldingIconSize * editor.getDpUnit();
+            final float padding = editor.getDpUnit() * 2f;
+            final float iconRight = lineNumberWidth - padding;
+            final float iconLeft = iconRight - iconSize;
+
+            if (layoutX >= iconLeft && layoutX <= iconRight && editor.getFoldingManager().isFoldableLine(line)) {
+                int row = (int) ((e.getY() + editor.getOffsetY()) / editor.getRowHeight());
+                row = Math.max(0, Math.min(row, editor.getLayout().getRowCount() - 1));
+                var rowInf = editor.getLayout().getRowAt(row);
+                if (rowInf.isLeadingRow && rowInf.lineIndex == line) {
+                    if (editor.toggleFold(line)) {
+                        notifyLater();
                         return true;
                     }
                 }
