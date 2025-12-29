@@ -134,9 +134,9 @@ open class TsLanguageSpec(
      */
     val localsDefinitionValueIndices = mutableListOf<Int>()
 
-    val blocksQuery = TSQuery.create(language, codeBlocksScmSource)
+    val blocksQuery = if (codeBlocksScmSource.isBlank()) TSQuery.EMPTY else TSQuery.create(language, codeBlocksScmSource)
 
-    val bracketsQuery = TSQuery.create(language, bracketsScmSource)
+    val bracketsQuery = if (bracketsScmSource.isBlank()) TSQuery.EMPTY else TSQuery.create(language, bracketsScmSource)
 
     init {
         // Check the queries before access
@@ -148,14 +148,14 @@ open class TsLanguageSpec(
                     throw IllegalArgumentException("use non-ASCII characters in scm source is unexpected")
                 }
             }
-            if (!tsQuery.canAccess()) {
-                throw IllegalArgumentException("Syntax highlights query is invalid")
-            }
             if (tsQuery.errorType != TSQueryError.None) {
                 val region = if (tsQuery.errorOffset < highlightScmOffset) "locals" else "highlight"
                 val offset =
                     if (tsQuery.errorOffset < highlightScmOffset) tsQuery.errorOffset else tsQuery.errorOffset - highlightScmOffset
                 throw IllegalArgumentException("bad scm sources: error ${tsQuery.errorType.name} occurs in $region range at offset $offset")
+            }
+            if (!tsQuery.canAccess()) {
+                throw IllegalArgumentException("Syntax highlights query is invalid")
             }
         } catch (e: IllegalArgumentException) {
             tsQuery.close()
