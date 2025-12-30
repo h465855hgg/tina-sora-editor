@@ -89,6 +89,7 @@ public class WordwrapLayout extends AbstractLayout {
     }
 
     private void breakAllLines() {
+        long version = text.getDocumentVersion();
         var taskCount = Math.min(SUBTASK_COUNT, (int) Math.ceil((float) text.getLineCount() / MIN_LINE_COUNT_FOR_SUBTASK));
         var sizeEachTask = text.getLineCount() / taskCount;
         var monitor = new TaskMonitor(taskCount, (results, cancelledCount) -> {
@@ -103,6 +104,9 @@ public class WordwrapLayout extends AbstractLayout {
                     if (WordwrapLayout.this.editor != editor) {
                         // This layout could have been abandoned when waiting for Runnable execution
                         // See #307
+                        return;
+                    }
+                    if (text.getDocumentVersion() != version) {
                         return;
                     }
                     if (rowTable != null) {
