@@ -88,6 +88,8 @@ public final class FoldingManager {
         final int oldHiddenHash = hiddenRangesHash();
 
         foldableEndsByStartLine.clear();
+        final int lineCount = editor.getLineCount();
+        final int lastLine = Math.max(0, lineCount - 1);
         if (styles != null) {
             final List<CodeBlock> blocksByStart = styles.blocksByStart;
             if (blocksByStart != null) {
@@ -96,11 +98,17 @@ public final class FoldingManager {
                     if (block == null) {
                         continue;
                     }
-                    if (block.endLine <= block.startLine) {
+                    int startLine = block.startLine;
+                    if (startLine < 0 || startLine > lastLine) {
                         continue;
                     }
-                    final int startLine = block.startLine;
-                    final int endLine = block.endLine;
+                    int endLine = block.endLine;
+                    if (endLine > lastLine) {
+                        endLine = lastLine;
+                    }
+                    if (endLine <= startLine) {
+                        continue;
+                    }
                     final int oldEnd = foldableEndsByStartLine.get(startLine, -1);
                     if (endLine > oldEnd) {
                         foldableEndsByStartLine.put(startLine, endLine);

@@ -229,8 +229,17 @@ open class TsAnalyzeManager(val languageSpec: TsLanguageSpec, var theme: TsTheme
                                 } else {
                                     node.endPoint
                                 }
-                                block.endLine = end.row
-                                block.endColumn = end.column / 2
+                                // Tree-sitter uses an exclusive end point. When a node ends at the beginning
+                                // of the next line (column == 0), using end.row directly will make endLine point
+                                // to a non-existent/empty line and may go out of bounds in folding rendering.
+                                var endLine = end.row
+                                var endColumn = end.column / 2
+                                if (endLine > block.startLine && end.column == 0) {
+                                    endLine -= 1
+                                    endColumn = Int.MAX_VALUE
+                                }
+                                block.endLine = endLine
+                                block.endColumn = endColumn
                             }
                             // A block is foldable when it spans more than one line (i.e. it can hide at least 1 line)
                             if (block.endLine > block.startLine) {

@@ -1786,7 +1786,15 @@ public class EditorRenderer {
         }
         
         // Get the end line content to find the closing token suffix (e.g. "}", "},", "});")
-        var endLineContent = getLine(foldRegion.endLine);
+        final int lineCount = content.getLineCount();
+        if (lineCount <= 0) {
+            return;
+        }
+        int endLine = foldRegion.endLine;
+        if (endLine < 0 || endLine >= lineCount) {
+            endLine = Math.max(0, Math.min(endLine, lineCount - 1));
+        }
+        var endLineContent = getLine(endLine);
         final String endLineRaw = endLineContent.toString();
 
         int suffixEnd = endLineRaw.length() - 1;
@@ -1857,7 +1865,7 @@ public class EditorRenderer {
             final int fallback = editor.getColorScheme().getColor(EditorColorScheme.TEXT_NORMAL);
             for (int i = 0; i < closingSuffix.length(); i++) {
                 final int col = closingSuffixStartColumn + i;
-                final int color = resolveCharForegroundColor(foldRegion.endLine, col, fallback);
+                final int color = resolveCharForegroundColor(endLine, col, fallback);
                 paintGeneral.setColor(color);
                 final String chStr = String.valueOf(closingSuffix.charAt(i));
                 canvas.drawText(chStr, closingX, baseline, paintGeneral);
