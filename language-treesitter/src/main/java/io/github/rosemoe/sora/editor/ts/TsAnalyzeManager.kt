@@ -215,17 +215,16 @@ open class TsAnalyzeManager(val languageSpec: TsLanguageSpec, var theme: TsTheme
                         match.captures.forEach {
                             val block = CodeBlock().also { block ->
                                 var node = it.node
+                                val captureName = languageSpec.blocksQuery.getCaptureNameForId(it.index)
+                                val markedEndAtLastTerminal = captureName.endsWith(".marked")
                                 val start = node.startPoint
                                 block.startLine = start.row
                                 block.startColumn = start.column / 2
-                                val end = if (languageSpec.blocksQuery.getCaptureNameForId(it.index)
-                                        .endsWith(".marked")
-                                ) {
-                                    // Goto last terminal element
+                                val end = if (markedEndAtLastTerminal) {
                                     while (node.childCount > 0) {
                                         node = node.getChild(node.childCount - 1)
                                     }
-                                    node.startPoint
+                                    node.endPoint
                                 } else {
                                     node.endPoint
                                 }

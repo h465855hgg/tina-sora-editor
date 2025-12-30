@@ -34,6 +34,10 @@ import android.view.ViewGroup;
 import android.widget.ImageButton;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import io.github.rosemoe.sora.R;
 import io.github.rosemoe.sora.event.ColorSchemeUpdateEvent;
@@ -72,6 +76,10 @@ public class EditorTextActionWindow extends EditorPopupWindow implements View.On
     private int lastPosition;
     private int lastCause;
     private boolean enabled = true;
+    
+    // 额外按钮提供者列表
+    private final List<ExtraButtonEntry> extraButtonEntries = new ArrayList<>();
+    private ViewGroup buttonContainer;
 
     /**
      * Create a panel for the given editor
@@ -98,6 +106,15 @@ public class EditorTextActionWindow extends EditorPopupWindow implements View.On
         copyBtn.setOnClickListener(this);
         pasteBtn.setOnClickListener(this);
         longSelectBtn.setOnClickListener(this);
+        
+        // 获取按钮容器，用于动态添加额外按钮
+        View scrollView = root.findViewById(R.id.panel_hv);
+        if (scrollView instanceof ViewGroup) {
+            View child = ((ViewGroup) scrollView).getChildAt(0);
+            if (child instanceof ViewGroup) {
+                buttonContainer = (ViewGroup) child;
+            }
+        }
 
         applyColorScheme();
         setContentView(root);
@@ -126,6 +143,10 @@ public class EditorTextActionWindow extends EditorPopupWindow implements View.On
         applyColorFilter(copyBtn, color);
         applyColorFilter(pasteBtn, color);
         applyColorFilter(longSelectBtn, color);
+        // 应用颜色到所有额外按钮
+        for (ExtraButtonEntry entry : extraButtonEntries) {
+            applyColorFilter(entry.button, color);
+        }
     }
 
     protected void subscribeEvents() {
@@ -323,8 +344,156 @@ public class EditorTextActionWindow extends EditorPopupWindow implements View.On
         pasteBtn.setVisibility(editor.isEditable() ? View.VISIBLE : View.GONE);
         cutBtn.setVisibility((editor.getCursor().isSelected() && editor.isEditable()) ? View.VISIBLE : View.GONE);
         longSelectBtn.setVisibility((!editor.getCursor().isSelected() && editor.isEditable()) ? View.VISIBLE : View.GONE);
+        
+        // 更新额外按钮的可见性
+        updateExtraButtonVisibility();
+        
         rootView.measure(View.MeasureSpec.makeMeasureSpec(1000000, View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(100000, View.MeasureSpec.AT_MOST));
-        setSize(Math.min(rootView.getMeasuredWidth(), (int) (editor.getDpUnit() * 230)), getHeight());
+        setSize(Math.min(rootView.getMeasuredWidth(), (int) (editor.getDpUnit() * 280)), getHeight());
+    }
+    
+    /**
+     * 更新所有额外按钮的可见性
+     */
+    private void updateExtraButtonVisibility() {
+        for (ExtraButtonEntry entry : extraButtonEntries) {
+            boolean shouldShow = entry.provider.shouldShowButton(editor);
+            entry.button.setVisibility(shouldShow ? View.VISIBLE : View.GONE);
+        }
+    }
+    
+    /**
+     * 添加额外按钮提供者
+     * @param provider 按钮提供者
+     */
+    public void addExtraButtonProvider(@NonNull ExtraButtonProvider provider) {
+        if (buttonContainer == null) {
+            return;
+        }
+        
+        // 检查是否已经添加过相同的提供者
+        for (ExtraButtonEntry entry : extraButtonEntries) {
+            if (entry.provider == provider) {
+                return;
+            }
+        }
+        
+        // 创建新的额外按钮
+        ImageButton button = new ImageButton(editor.getContext());
+        android.widget.LinearLayout.LayoutParams params = new android.widget.LinearLayout.LayoutParams(
+            (int) (45 * editor.getDpUnit()),
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+        );
+        button.setLayoutParams(params);
+        button.setImageResource(provider.getIconResource());
+        button.setBackgroundResource(android.R.color.transparent);
+        button.setContentDescription(provider.getContentDescription());
+        button.setVisibility(View.GONE);
+        button.setOnClickListener(v -> {
+            provider.onButtonClick(editor);
+            dismiss();
+        });
+        
+        // 应用颜色
+        int color = editor.getColorScheme().getColor(EditorColorScheme.TEXT_ACTION_WINDOW_ICON_COLOR);
+        applyColorFilter(button, color);
+        
+        // 添加到容器
+        buttonContainer.addView(button);
+        
+        // 保存到列表
+        extraButtonEntries.add(new ExtraButtonEntry(provider, button));
+    }
+    
+    /**
+     * 移除额外按钮提供者
+     * @param provider 要移除的按钮提供者
+     */
+    public void removeExtraButtonProvider(@NonNull ExtraButtonProvider provider) {
+        if (buttonContainer == null) {
+            return;
+        }
+        
+        ExtraButtonEntry toRemove = null;
+        for (ExtraButtonEntry entry : extraButtonEntries) {
+            if (entry.provider == provider) {
+                toRemove = entry;
+                break;
+            }
+        }
+        
+        if (toRemove != null) {
+            buttonContainer.removeView(toRemove.button);
+            extraButtonEntries.remove(toRemove);
+        }
+    }
+    
+    /**
+     * 清除所有额外按钮提供者
+     */
+    public void clearExtraButtonProviders() {
+        if (buttonContainer == null) {
+            return;
+        }
+        
+        for (ExtraButtonEntry entry : extraButtonEntries) {
+            buttonContainer.removeView(entry.button);
+        }
+        extraButtonEntries.clear();
+    }
+    
+    /**
+     * 获取所有额外按钮提供者
+     */
+    @NonNull
+    public List<ExtraButtonProvider> getExtraButtonProviders() {
+        List<ExtraButtonProvider> providers = new ArrayList<>();
+        for (ExtraButtonEntry entry : extraButtonEntries) {
+            providers.add(entry.provider);
+        }
+        return providers;
+    }
+    
+    /**
+     * 额外按钮条目，保存提供者和对应的按钮
+     */
+    private static class ExtraButtonEntry {
+        final ExtraButtonProvider provider;
+        final ImageButton button;
+        
+        ExtraButtonEntry(ExtraButtonProvider provider, ImageButton button) {
+            this.provider = provider;
+            this.button = button;
+        }
+    }
+    
+    /**
+     * 额外按钮提供者接口
+     */
+    public interface ExtraButtonProvider {
+        /**
+         * 获取按钮图标资源 ID
+         */
+        int getIconResource();
+        
+        /**
+         * 获取按钮的内容描述（用于无障碍）
+         */
+        @Nullable
+        String getContentDescription();
+        
+        /**
+         * 判断是否应该显示按钮
+         * @param editor 编辑器实例
+         * @return 如果应该显示返回 true
+         */
+        boolean shouldShowButton(@NonNull CodeEditor editor);
+        
+        /**
+         * 按钮点击回调
+         * @param editor 编辑器实例
+         */
+        void onButtonClick(@NonNull CodeEditor editor);
     }
 
     @Override
