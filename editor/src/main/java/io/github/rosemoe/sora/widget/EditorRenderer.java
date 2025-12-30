@@ -1785,29 +1785,49 @@ public class EditorRenderer {
             return;
         }
         
-        // Get the end line content to find the closing character
+        // Get the end line content to find the closing token suffix (e.g. "}", "},", "});")
         var endLineContent = getLine(foldRegion.endLine);
         final String endLineRaw = endLineContent.toString();
 
-        // Find the last non-whitespace char and its column
-        int lastNonWs = endLineRaw.length() - 1;
-        while (lastNonWs >= 0 && Character.isWhitespace(endLineRaw.charAt(lastNonWs))) {
-            lastNonWs--;
+        int suffixEnd = endLineRaw.length() - 1;
+        while (suffixEnd >= 0 && Character.isWhitespace(endLineRaw.charAt(suffixEnd))) {
+            suffixEnd--;
         }
 
-        String closingChar = "";
-        int closingColor = editor.getColorScheme().getColor(EditorColorScheme.TEXT_NORMAL);
-        if (lastNonWs >= 0) {
-            final char ch = endLineRaw.charAt(lastNonWs);
-            if (ch == '}' || ch == ')' || ch == ']') {
-                closingChar = String.valueOf(ch);
-                // Resolve color from spans so it can match rainbow brackets even when folded.
-                closingColor = resolveCharForegroundColor(foldRegion.endLine, lastNonWs, closingColor);
+        String closingSuffix = "";
+        int closingSuffixStartColumn = -1;
+        if (suffixEnd >= 0) {
+            int suffixStart = suffixEnd;
+            while (suffixStart >= 0) {
+                final char ch = endLineRaw.charAt(suffixStart);
+                if (ch == '}' || ch == ')' || ch == ']' || ch == ',' || ch == ';') {
+                    suffixStart--;
+                    continue;
+                }
+                if (Character.isWhitespace(ch)) {
+                    break;
+                }
+                break;
+            }
+            suffixStart++;
+            if (suffixStart <= suffixEnd) {
+                final String candidate = endLineRaw.substring(suffixStart, suffixEnd + 1);
+                boolean hasClosingBracket = false;
+                for (int i = 0; i < candidate.length(); i++) {
+                    final char ch = candidate.charAt(i);
+                    if (ch == '}' || ch == ')' || ch == ']') {
+                        hasClosingBracket = true;
+                        break;
+                    }
+                }
+                if (hasClosingBracket) {
+                    closingSuffix = candidate;
+                    closingSuffixStartColumn = suffixStart;
+                }
             }
         }
         
         final float placeholderWidth = paintGeneral.measureText(placeholder);
-        final float closingCharWidth = closingChar.isEmpty() ? 0 : paintGeneral.measureText(closingChar);
         
         // Calculate the x position at the end of the line content
         // Use the trailing row's end column to get the text width
@@ -1831,11 +1851,18 @@ public class EditorRenderer {
         paintGeneral.setColor(editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_COLOR));
         canvas.drawText(placeholder, x, baseline, paintGeneral);
         
-        // Draw the closing bracket with the resolved color (no background)
-        if (!closingChar.isEmpty()) {
+        // Draw the closing suffix with resolved colors (no background)
+        if (!closingSuffix.isEmpty() && closingSuffixStartColumn >= 0) {
             float closingX = x + placeholderWidth + paddingX;
-            paintGeneral.setColor(closingColor);
-            canvas.drawText(closingChar, closingX, baseline, paintGeneral);
+            final int fallback = editor.getColorScheme().getColor(EditorColorScheme.TEXT_NORMAL);
+            for (int i = 0; i < closingSuffix.length(); i++) {
+                final int col = closingSuffixStartColumn + i;
+                final int color = resolveCharForegroundColor(foldRegion.endLine, col, fallback);
+                paintGeneral.setColor(color);
+                final String chStr = String.valueOf(closingSuffix.charAt(i));
+                canvas.drawText(chStr, closingX, baseline, paintGeneral);
+                closingX += paintGeneral.measureText(chStr);
+            }
         }
         
         canvas.restore();
