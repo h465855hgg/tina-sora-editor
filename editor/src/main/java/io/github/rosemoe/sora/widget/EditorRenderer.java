@@ -924,7 +924,7 @@ public class EditorRenderer {
             final float padding = editor.getDpUnit() * 2f;
             numberWidth = Math.max(0f, width - (iconSize + padding * 2f));
         }
-        
+
         // Check if there's a breakpoint on this line
         var breakpoint = getLineStyle(lineIndex, LineBreakpoint.class);
         if (breakpoint != null) {
@@ -964,7 +964,7 @@ public class EditorRenderer {
             }
         }
     }
-    
+
     /**
      * Draw a breakpoint circle in place of the line number
      */
@@ -972,23 +972,23 @@ public class EditorRenderer {
         // Calculate circle size based on row height
         float rowHeight = editor.getRowHeight();
         float circleSize = rowHeight * 0.75f;  // Circle is 75% of row height for better visibility
-        
+
         // Calculate center position
         float centerX = offsetX + numberWidth / 2f;
         float centerY = (editor.getRowBottom(row) + editor.getRowTop(row)) / 2f - editor.getOffsetY();
-        
+
         // Get breakpoint color
         int breakpointColor = breakpoint.getColor().resolve(editor.getColorScheme());
-        
+
         // Apply alpha if breakpoint is disabled
         if (!breakpoint.getEnabled()) {
             breakpointColor = (breakpointColor & 0x00FFFFFF) | 0x80000000;  // 50% alpha
         }
-        
+
         // Draw the circle
         paintGeneral.setColor(breakpointColor);
         canvas.drawCircle(centerX, centerY, circleSize / 2f, paintGeneral);
-        
+
         // If not verified, draw a hollow circle outline
         if (!breakpoint.getVerified() && breakpoint.getEnabled()) {
             paintGeneral.setStyle(android.graphics.Paint.Style.STROKE);
@@ -1774,17 +1774,17 @@ public class EditorRenderer {
 
         final int oldColor = paintGeneral.getColor();
         final float baseline = editor.getRowBaseline(0);
-        
+
         // Get the line index for this row
         var rowInfo = editor.getLayout().getRowAt(row);
         int line = rowInfo.lineIndex;
-        
+
         // Get the fold region to find the closing brace
         var foldRegion = editor.getFoldingManager().getFoldRegion(line);
         if (foldRegion == null) {
             return;
         }
-        
+
         // Get the end line content to find the closing token suffix (e.g. "}", "},", "});")
         final int lineCount = content.getLineCount();
         if (lineCount <= 0) {
@@ -1797,82 +1797,103 @@ public class EditorRenderer {
         var endLineContent = getLine(endLine);
         final String endLineRaw = endLineContent.toString();
 
+        // ---------------------------------------------------------------
+        // 智能后缀提取逻辑 (Smart Suffix Logic)
+        // ---------------------------------------------------------------
         int suffixEnd = endLineRaw.length() - 1;
+        // 1. 跳过行尾的空白字符
         while (suffixEnd >= 0 && Character.isWhitespace(endLineRaw.charAt(suffixEnd))) {
             suffixEnd--;
         }
 
         String closingSuffix = "";
         int closingSuffixStartColumn = -1;
+
         if (suffixEnd >= 0) {
             int suffixStart = suffixEnd;
+            // 2. 向前扫描，寻找闭合符号
             while (suffixStart >= 0) {
                 final char ch = endLineRaw.charAt(suffixStart);
-                if (ch == '}' || ch == ')' || ch == ']' || ch == ',' || ch == ';') {
+                // 我们允许扫描到分号或逗号，这样可以确定它们的位置，但在绘制时我们会过滤掉它们。
+                // 如果遇到非括号、非标点的字符（比如代码文本），则停止扫描。
+                if (ch == '}' || ch == ')' || ch == ']' || ch == ';' || ch == ',') {
                     suffixStart--;
                     continue;
                 }
-                if (Character.isWhitespace(ch)) {
-                    break;
-                }
+                // 遇到空白或其他字符，停止
                 break;
             }
-            suffixStart++;
+            suffixStart++; // 回退到有效字符位置
+
             if (suffixStart <= suffixEnd) {
-                final String candidate = endLineRaw.substring(suffixStart, suffixEnd + 1);
-                boolean hasClosingBracket = false;
-                for (int i = 0; i < candidate.length(); i++) {
-                    final char ch = candidate.charAt(i);
-                    if (ch == '}' || ch == ')' || ch == ']') {
-                        hasClosingBracket = true;
+                // 3. 验证提取的片段中是否真的包含括号
+                // 如果只提取到了 ";"，我们就不应该显示任何东西
+                boolean hasBracket = false;
+                for (int i = suffixStart; i <= suffixEnd; i++) {
+                    char c = endLineRaw.charAt(i);
+                    if (c == '}' || c == ')' || c == ']') {
+                        hasBracket = true;
                         break;
                     }
                 }
-                if (hasClosingBracket) {
-                    closingSuffix = candidate;
+
+                if (hasBracket) {
+                    closingSuffix = endLineRaw.substring(suffixStart, suffixEnd + 1);
                     closingSuffixStartColumn = suffixStart;
                 }
             }
         }
-        
+        // ---------------------------------------------------------------
+
         final float placeholderWidth = paintGeneral.measureText(placeholder);
-        
+
         // Calculate the x position at the end of the line content
         // Use the trailing row's end column to get the text width
         var tr = createTextRow(row);
         float lineEndX = tr.computeRowWidth();
-        
+
         // Position the placeholder right after the line content
         float x = lineEndX + paddingX;
 
         canvas.save();
         canvas.translate(-offsetCopy, editor.getRowTop(row) - editor.getOffsetY());
-        
+
         // Draw the placeholder background (only for "...")
         tmpRect.left = x - paddingX;
         tmpRect.right = x + placeholderWidth + paddingX;
         tmpRect.top = editor.getRowTopOfText(0) - paddingY;
         tmpRect.bottom = editor.getRowBottomOfText(0) + paddingY;
         drawColorRound(canvas, editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_BACKGROUND), tmpRect);
-        
+
         // Draw the placeholder text "..."
         paintGeneral.setColor(editor.getColorScheme().getColor(EditorColorScheme.FOLDED_TEXT_COLOR));
         canvas.drawText(placeholder, x, baseline, paintGeneral);
-        
+
         // Draw the closing suffix with resolved colors (no background)
         if (!closingSuffix.isEmpty() && closingSuffixStartColumn >= 0) {
             float closingX = x + placeholderWidth + paddingX;
             final int fallback = editor.getColorScheme().getColor(EditorColorScheme.TEXT_NORMAL);
+
             for (int i = 0; i < closingSuffix.length(); i++) {
+                final char ch = closingSuffix.charAt(i);
+
+                // 核心过滤：只绘制闭合括号，忽略分号、逗号等干扰字符
+                // 这样 { code; } 折叠后会显示 {...} 而不是 {...;}
+                if (ch != '}' && ch != ')' && ch != ']') {
+                    continue;
+                }
+
                 final int col = closingSuffixStartColumn + i;
+                // 获取该字符在原始位置的语法高亮颜色
                 final int color = resolveCharForegroundColor(endLine, col, fallback);
                 paintGeneral.setColor(color);
-                final String chStr = String.valueOf(closingSuffix.charAt(i));
+
+                final String chStr = String.valueOf(ch);
                 canvas.drawText(chStr, closingX, baseline, paintGeneral);
                 closingX += paintGeneral.measureText(chStr);
             }
         }
-        
+
         canvas.restore();
 
         paintGeneral.setColor(oldColor);
