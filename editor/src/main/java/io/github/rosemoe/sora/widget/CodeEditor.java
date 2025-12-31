@@ -5137,11 +5137,16 @@ public class CodeEditor extends View implements ContentListener, Formatter.Forma
     protected void onCreateContextMenu(ContextMenu menu) {
         super.onCreateContextMenu(menu);
         final var pos = touchHandler.getLastContextClickPosition();
-        if (pos == null) {
-            return;
+        CharPosition charPos;
+        if (pos != null) {
+            // 鼠标右键点击时使用点击位置
+            var pointPos = getPointPositionOnScreen(pos.x, pos.y);
+            charPos = text.getIndexer().getCharPosition(IntPair.getFirst(pointPos), IntPair.getSecond(pointPos));
+        } else {
+            // 触摸屏长按时使用当前光标位置
+            charPos = cursor.left();
         }
-        var charPos = getPointPositionOnScreen(pos.x, pos.y);
-        dispatchEvent(new CreateContextMenuEvent(this, menu, text.getIndexer().getCharPosition(IntPair.getFirst(charPos), IntPair.getSecond(charPos))));
+        dispatchEvent(new CreateContextMenuEvent(this, menu, charPos));
     }
 
     @Override
